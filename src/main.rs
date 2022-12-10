@@ -1,11 +1,11 @@
+use clap::Parser;
 use image::buffer::ConvertBuffer;
 use image::error::ImageFormatHint::Exact;
 use image::GrayImage;
 use image::{GenericImage, GenericImageView, ImageBuffer, Rgb, RgbImage};
 use rayon::prelude::*;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
-
-use clap::Parser;
 
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
@@ -25,6 +25,10 @@ pub struct V3 {
     x: f32,
     y: f32,
     z: f32,
+}
+
+pub struct Cup {
+    renderables: Vec<Box<dyn Renderable>>,
 }
 
 fn sub(x: &V3, y: &V3) -> V3 {
@@ -73,7 +77,10 @@ struct Torus {
     small_radius: f32,
 }
 
-struct Plane {}
+struct Plane {
+    point: V3,
+    axis: V3,
+}
 
 pub trait Renderable {
     fn sdf(&self, x: &V3) -> f32;
@@ -82,6 +89,19 @@ pub trait Renderable {
 impl Renderable for Sphere {
     fn sdf(&self, x: &V3) -> f32 {
         abs(&sub(&x, &self.center)) - self.radius
+    }
+}
+
+impl Renderable for Cup {
+    fn sdf(&self, x: &V3) -> f32 {
+        match self
+            .renderables
+            .iter()
+            .min_by(|xx, yy| (*xx).sdf(x).total_cmp(&(*yy).sdf(x)))
+        {
+            None => 0.,
+            Some(y) => (*y).sdf(x),
+        }
     }
 }
 
@@ -96,6 +116,12 @@ impl Renderable for Torus {
         let plane_proj = sub(&rel_pos, &axis_proj); //v planeProj = sub(relPos, axisProj);
         let circle_proj = mul(self.big_radius, &normalize(&plane_proj)); // v circleProj = scale(t->br, vnormalize(planeProj));
         dist(&circle_proj, &rel_pos) - self.small_radius
+    }
+}
+
+impl Renderable for Plane {
+    fn sdf(&self, x: &V3) -> f32 {
+        dot(&sub(x, &self.point), &self.axis)
     }
 }
 
@@ -192,6 +218,15 @@ fn main() {
         big_radius: 1.2,
         small_radius: 0.7,
     };
+    let t = Sphere {
+        center: v(0., 0., 6.),
+        radius: 0.6,
+    };
+    let f = Cup {
+        renderables: vec![Box::new(s), Box::new(t)],
+    };
+
+    let fmut = Mutex::new(f);
     let w = args.size;
 
     println!("Starting image generation!");
@@ -201,6 +236,7 @@ fn main() {
         .enumerate()
         .map(|(i, p)| (i as u32 % w, i as u32 / w, p))
         .for_each(|(x, y, p)| {
+            let z = *fmut.lock().unwrap();
             let pix_width = 2. / w as f32;
             let loc = V3 {
                 x: (2. * x as f32) / w as f32 - 1.,
@@ -218,7 +254,7 @@ fn main() {
                         0.,
                     );
                     let subpix_loc = &add(&loc, &jitter);
-                    pix_sum += render(&s, subpix_loc);
+                    pix_sum += render(&z, subpix_loc);
                 }
             }
 

@@ -27,7 +27,12 @@ pub struct V3 {
     z: f32,
 }
 
+#[derive(Default)]
 pub struct Cup {
+    renderables: Vec<Box<dyn Renderable>>,
+}
+
+pub struct Cap {
     renderables: Vec<Box<dyn Renderable>>,
 }
 
@@ -98,6 +103,19 @@ impl Renderable for Cup {
             .renderables
             .iter()
             .min_by(|xx, yy| (*xx).sdf(x).total_cmp(&(*yy).sdf(x)))
+        {
+            None => 0.,
+            Some(y) => (*y).sdf(x),
+        }
+    }
+}
+
+impl Renderable for Cap {
+    fn sdf(&self, x: &V3) -> f32 {
+        match self
+            .renderables
+            .iter()
+            .max_by(|xx, yy| (*xx).sdf(x).total_cmp(&(*yy).sdf(x)))
         {
             None => 0.,
             Some(y) => (*y).sdf(x),
@@ -204,39 +222,37 @@ fn dot(x: &V3, y: &V3) -> f32 {
 
 fn main() {
     let args = Args::parse();
-    let s = Torus {
-        center: V3 {
-            x: 0.,
-            y: 0.,
-            z: 6.,
-        },
-        axis: normalize(&V3 {
-            x: 1.,
-            y: -1.,
-            z: -1.3,
-        }),
-        big_radius: 1.2,
-        small_radius: 0.7,
-    };
-    let t = Sphere {
-        center: v(0., 0., 6.),
-        radius: 0.6,
-    };
-    let f = Cup {
-        renderables: vec![Box::new(s), Box::new(t)],
-    };
-
-    let fmut = Mutex::new(f);
-    let w = args.size;
 
     println!("Starting image generation!");
     let start = Instant::now();
+    let w = args.size;
     let mut img2: ImageBuffer<image::Luma<f32>, Vec<f32>> = ImageBuffer::new(w, w);
     img2.par_iter_mut()
         .enumerate()
         .map(|(i, p)| (i as u32 % w, i as u32 / w, p))
-        .for_each(|(x, y, p)| {
-            let z = *fmut.lock().unwrap();
+        .for_each(move |(x, y, p)| {
+            let s = Torus {
+                center: V3 {
+                    x: 0.,
+                    y: 0.,
+                    z: 6.,
+                },
+                axis: normalize(&V3 {
+                    x: 1.,
+                    y: -1.,
+                    z: -1.3,
+                }),
+                big_radius: 1.2,
+                small_radius: 0.9,
+            };
+            let t = Sphere {
+                center: v(0., 0., 6.),
+                radius: 0.6,
+            };
+            let f = Cap {
+                renderables: vec![Box::new(s), Box::new(t)],
+            };
+
             let pix_width = 2. / w as f32;
             let loc = V3 {
                 x: (2. * x as f32) / w as f32 - 1.,
@@ -254,7 +270,7 @@ fn main() {
                         0.,
                     );
                     let subpix_loc = &add(&loc, &jitter);
-                    pix_sum += render(&z, subpix_loc);
+                    pix_sum += render(&f, subpix_loc);
                 }
             }
 

@@ -9,20 +9,20 @@ pub struct Cap {
 }
 
 pub struct Sphere {
-    center: V3,
-    radius: f64,
+    pub center: V3,
+    pub radius: f64,
 }
 
 pub struct Torus {
-    center: V3,
-    axis: V3,
-    big_radius: f64,
-    small_radius: f64,
+    pub center: V3,
+    pub axis: V3,
+    pub big_radius: f64,
+    pub small_radius: f64,
 }
 
 pub struct Plane {
-    point: V3,
-    axis: V3,
+    pub point: V3,
+    pub axis: V3,
 }
 
 pub trait Renderable {

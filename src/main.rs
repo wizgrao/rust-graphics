@@ -1,6 +1,6 @@
 use clap::Parser;
-use graphics::linalg::{abs, add, dist, mul, normalize, sub, v, V3};
-use graphics::marcher::{render, Cap};
+use graphics::math::{abs, add, dist, mul, normalize, sub, v, V3};
+use graphics::marcher::{render, Cap, Torus, Sphere};
 use image::buffer::ConvertBuffer;
 use image::error::ImageFormatHint::Exact;
 use image::GrayImage;
@@ -28,7 +28,7 @@ fn main() {
     println!("Starting image generation!");
     let start = Instant::now();
     let w = args.size;
-    let mut img2: ImageBuffer<image::Luma<f32>, Vec<f32>> = ImageBuffer::new(w, w);
+    let mut img2: ImageBuffer<image::Luma<f64>, Vec<f64>> = ImageBuffer::new(w, w);
     img2.par_iter_mut()
         .enumerate()
         .map(|(i, p)| (i as u32 % w, i as u32 / w, p))
@@ -57,8 +57,8 @@ fn main() {
 
             let pix_width = 2. / w as f32;
             let loc = V3 {
-                x: (2. * x as f32) / w as f32 - 1.,
-                y: (2. * y as f32) / w as f32 - 1.,
+                x: (2. * x as f64) / w as f64 - 1.,
+                y: (2. * y as f64) / w as f64 - 1.,
                 z: 2.,
             };
             let anti_aliasing = args.antialias;
@@ -67,16 +67,16 @@ fn main() {
             for x_jitter in 0..anti_aliasing {
                 for y_jitter in 0..anti_aliasing {
                     let jitter = v(
-                        x_jitter as f32 * subpixel_width,
-                        y_jitter as f32 * subpixel_width,
+                        x_jitter as f64 * subpixel_width,
+                        y_jitter as f64 * subpixel_width,
                         0.,
                     );
-                    let subpix_loc = &add(&loc, &jitter);
+                    let subpix_loc = &(loc + jitter);
                     pix_sum += render(&f, subpix_loc);
                 }
             }
 
-            *p = pix_sum / (anti_aliasing as f32 * anti_aliasing as f32)
+            *p = pix_sum / (anti_aliasing as f64 * anti_aliasing as f64)
         });
     println!("Render took {} s", start.elapsed().as_secs_f32());
     let a: ImageBuffer<Rgb<u16>, Vec<u16>> = img2.convert();

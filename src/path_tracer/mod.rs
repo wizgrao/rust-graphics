@@ -81,6 +81,31 @@ impl Object for Solid {
     }
 }
 
+pub struct Cup {
+    pub objects: Vec<Box<dyn Object>>,
+}
+
+impl Object for Cup {
+    fn intersect(&self, r: &Ray) -> Option<IntersectionWithBSDF> {
+        let mut ret: Option<IntersectionWithBSDF> = None;
+        for object in self.objects.iter() {
+            let intersection = object.intersect(r) ;
+            match (&ret, &intersection) {
+                (Some((retIntersection, _)), Some((newIntersection, bsdf))) => {
+                    if retIntersection.t > newIntersection.t {
+                        ret = object.intersect(r)
+                    }
+                },
+                (None, Some(i)) => {
+                        ret = object.intersect(r)
+                },
+                _ => {},
+            }
+        }
+        return ret
+    }
+}
+
 pub fn estimated_total_radiance(o: &impl Object, r: &Ray) -> V3 {
     match o.intersect(r) {
         Some(p) => {
@@ -127,6 +152,7 @@ fn estimated_one_bounce_radiance(o: &impl Object, r: &Ray, p: &IntersectionWithB
     let d_o = w2o * r.d;
 
     let (pdf, wi_o) = (*bsdf).sample_wi(d_o);
+    let reflection = (*bsdf).bsdf(d_o, wi_o);
     let wi_w = o2w * wi_o;
     let starting_point = intersection.x + EPS * wi_w;
     let new_ray = Ray {
@@ -135,7 +161,7 @@ fn estimated_one_bounce_radiance(o: &impl Object, r: &Ray, p: &IntersectionWithB
     };
     match o.intersect(&new_ray) {
         None => math::O,
-        Some(new_p) => 1. / pdf * wi_o.z * estimated_zero_bounce_radiance(&new_ray, &new_p),
+        Some(new_p) => 1. / pdf * wi_o.z * estimated_zero_bounce_radiance(&new_ray, &new_p) * reflection,
     }
 }
 
@@ -159,6 +185,7 @@ fn estimated_at_least_one_bounce_radiance(
     let d_o = w2o * r.d;
 
     let (pdf, wi_o) = (**bsdf).sample_wi(d_o);
+    let reflection = (*bsdf).bsdf(d_o, wi_o);
     let wi_w = o2w * wi_o;
     let starting_point = intersection.x + EPS * wi_w;
     let new_ray = Ray {
@@ -171,6 +198,7 @@ fn estimated_at_least_one_bounce_radiance(
             1. / pdf / (1. - TERMINATION_P)
                 * wi_o.z
                 * estimated_at_least_one_bounce_radiance(o, &new_ray, &new_p)
+                * reflection
                 + one_bounce
         }
     }

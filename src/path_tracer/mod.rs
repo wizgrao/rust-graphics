@@ -1,36 +1,100 @@
-use crate::math;
-use crate::math::Intersection;
-use rand::distributions::uniform::UniformFloat;
+use crate::math::{Intersectable, Intersection, Ray};
+use crate::{math, V3};
 use rand::distributions::Standard;
 use rand::{thread_rng, Rng};
+use rand_distr::StandardNormal;
+use std::f32::consts::PI;
+use std::sync::Arc;
 
 const EPS: f64 = 1e-4;
 const TERMINATION_P: f64 = 0.2;
 
 pub trait BSDF {
-    fn sample_wi(&self, wo: math::V3) -> (f64, math::V3);
+    fn sample_wi(&self, wo: V3) -> (f64, V3);
     fn bsdf(&self, wo: math::V3, wi: math::V3) -> math::V3;
     fn radiance(&self, wo: math::V3) -> math::V3;
 }
-type IntersectionWithBSDF = Box<(Intersection, dyn BSDF)>;
+
+pub struct Lambertian {
+    pub reflectance: V3,
+}
+
+pub struct Emissive {
+    pub emission: V3,
+}
+
+fn sample_hemisphere() -> (f64, V3) {
+    let x = thread_rng().sample(StandardNormal);
+    let y = thread_rng().sample(StandardNormal);
+    let z: f64 = thread_rng().sample(StandardNormal);
+    let z_pos = if z > 0.0 { z } else { -z };
+    return (
+        (1. / (2. * PI)) as f64,
+        math::normalize(&math::v(x, y, z_pos)),
+    );
+}
+
+impl BSDF for Lambertian {
+    fn sample_wi(&self, _wo: V3) -> (f64, V3) {
+        sample_hemisphere()
+    }
+
+    fn bsdf(&self, _wo: V3, _wi: V3) -> V3 {
+        (1. / PI as f64) * self.reflectance
+    }
+
+    fn radiance(&self, wo: V3) -> V3 {
+        math::O
+    }
+}
+
+impl BSDF for Emissive {
+    fn sample_wi(&self, _wo: V3) -> (f64, V3) {
+        sample_hemisphere()
+    }
+
+    fn bsdf(&self, _wo: V3, _wi: V3) -> V3 {
+        math::O
+    }
+
+    fn radiance(&self, _wo: V3) -> V3 {
+        self.emission
+    }
+}
+
+type IntersectionWithBSDF = (Intersection, Arc<dyn BSDF>);
 pub trait Object {
-    fn intersect(&self, r: &math::Ray) -> Option<IntersectionWithBSDF>;
+    fn intersect(&self, r: &Ray) -> Option<IntersectionWithBSDF>;
 }
 
-pub fn estimated_total_radiance(o: &impl Object, r: &math::Ray) -> math::V3 {
-    return estimated_at_least_one_bounce_radiance(o, r)
-        + estimated_at_least_one_bounce_radiance(o, r);
+pub struct Solid {
+    bsdf: Arc<dyn BSDF>,
+    intersectable: Arc<dyn Intersectable>,
 }
 
-pub fn estimated_zero_bounce_radiance(
-    o: &impl Object,
-    r: &math::Ray,
-    p: IntersectionWithBSDF,
-) -> math::V3 {
-    return (*p).1.radiance(r.d);
+impl Object for Solid {
+    fn intersect(&self, r: &Ray) -> Option<IntersectionWithBSDF> {
+        match self.intersectable.intersect(r) {
+            None => None,
+            Some(intersection) => Some((intersection, self.bsdf.clone())),
+        }
+    }
 }
 
-pub fn bounce(r: &math::Ray, intersection: &Intersection, p: IntersectionWithBSDF) -> math::Ray {
+pub fn estimated_total_radiance(o: &impl Object, r: &Ray) -> V3 {
+    match o.intersect(r) {
+        Some(p) => {
+            estimated_zero_bounce_radiance(r, &p) + estimated_at_least_one_bounce_radiance(o, r, &p)
+        }
+        None => math::O,
+    }
+}
+
+fn estimated_zero_bounce_radiance(r: &Ray, p: &IntersectionWithBSDF) -> V3 {
+    return p.1.radiance(r.d);
+}
+
+fn bounce(r: &math::Ray, intersection: &Intersection) -> Ray {
     let o2w = math::M3 {
         v0: intersection.s,
         v1: math::cross(&intersection.n, &intersection.s),
@@ -40,34 +104,68 @@ pub fn bounce(r: &math::Ray, intersection: &Intersection, p: IntersectionWithBSD
     let d_o = w2o * r.d;
     let do_bounce = math::v(d_o.x, d_o.y, -d_o.z);
     let d_bounce = o2w * do_bounce;
-    math::Ray {
+    Ray {
         x: intersection.x + EPS * d_bounce,
         d: d_bounce,
     }
 }
 
-pub fn estimated_one_bounce_radiance(
-    o: &impl Object,
-    r: &math::Ray,
-    p: IntersectionWithBSDF,
-) -> math::V3 {
+fn estimated_one_bounce_radiance(o: &impl Object, r: &Ray, p: &IntersectionWithBSDF) -> V3 {
+    let (intersection, bsdf) = p;
+    let o2w = math::M3 {
+        v0: intersection.s,
+        v1: math::cross(&intersection.n, &intersection.s),
+        v2: intersection.n,
+    };
+    let w2o = o2w.t();
+    let d_o = w2o * r.d;
+
+    let (pdf, wi_o) = (*bsdf).sample_wi(d_o);
+    let wi_w = o2w * wi_o;
+    let starting_point = intersection.x + EPS * wi_w;
+    let new_ray = Ray {
+        x: starting_point,
+        d: wi_w,
+    };
+    match o.intersect(&new_ray) {
+        None => math::O,
+        Some(new_p) => 1. / pdf * wi_o.z * estimated_zero_bounce_radiance(&new_ray, &new_p),
+    }
 }
 
-pub fn estimated_at_least_one_bounce_radiance(o: &impl Object, r: &math::Ray) -> math::V3 {
-    let one_bounce = estimated_one_bounce_radiance(o, r);
+fn estimated_at_least_one_bounce_radiance(
+    o: &impl Object,
+    r: &Ray,
+    p: &IntersectionWithBSDF,
+) -> V3 {
+    let one_bounce = estimated_one_bounce_radiance(o, r, p);
     let thresh: f64 = thread_rng().sample(Standard);
     if thresh < TERMINATION_P {
         return one_bounce;
     }
-    let isect = o.intersect(r);
-    match isect {
+    let (intersection, bsdf) = p;
+    let o2w = math::M3 {
+        v0: intersection.s,
+        v1: math::cross(&intersection.n, &intersection.s),
+        v2: intersection.n,
+    };
+    let w2o = o2w.t();
+    let d_o = w2o * r.d;
+
+    let (pdf, wi_o) = (**bsdf).sample_wi(d_o);
+    let wi_w = o2w * wi_o;
+    let starting_point = intersection.x + EPS * wi_w;
+    let new_ray = Ray {
+        x: starting_point,
+        d: wi_w,
+    };
+    match o.intersect(&new_ray) {
         None => one_bounce,
-        Some(b) => {
-            let intersection = (*b).0;
-            let bounced = bounce(r, &intersection);
-            return one_bounce
-                + 1.0 / (1.0 - TERMINATION_P)
-                    * estimated_at_least_one_bounce_radiance(o, &bounced);
+        Some(new_p) => {
+            1. / pdf / (1. - TERMINATION_P)
+                * wi_o.z
+                * estimated_at_least_one_bounce_radiance(o, &new_ray, &new_p)
+                + one_bounce
         }
     }
 }

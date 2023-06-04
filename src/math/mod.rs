@@ -80,7 +80,7 @@ impl Intersectable for Sphere {
             return None;
         }
 
-        let d2 = -(tc*tc) + dot(&l, &l);
+        let d2 = -(tc * tc) + dot(&l, &l);
 
         let radius2 = self.r * self.r;
         if d2 > radius2 {
@@ -88,24 +88,24 @@ impl Intersectable for Sphere {
         }
 
         //solve for t1c
-        let t1c = ( radius2 - d2 ).sqrt();
+        let t1c = (radius2 - d2).sqrt();
 
         //solve for intersection points
         let t1 = match tc - t1c > 0. {
-           true => tc - t1c,
-           _ => tc + t1c,
+            true => tc - t1c,
+            _ => tc + t1c,
         };
 
         let new_x = r.x + t1 * r.d;
-        let n_unnormalized  = new_x - self.x;
+        let n_unnormalized = new_x - self.x;
         let n_normalized = normalize(&n_unnormalized);
-        let s_unnormalized = if n_normalized.z*n_normalized.z < 0.95 {
+        let s_unnormalized = if n_normalized.z * n_normalized.z < 0.95 {
             v(n_unnormalized.y, -n_unnormalized.x, 0.0)
         } else {
             v(0.0, n_unnormalized.z, -n_unnormalized.y)
         };
 
-        return Some(Intersection{
+        return Some(Intersection {
             x: new_x,
             n: n_normalized,
             s: normalize(&s_unnormalized),
@@ -172,7 +172,7 @@ impl ops::Add<V3> for V3 {
     type Output = V3;
 
     fn add(self, rhs: V3) -> V3 {
-        return add(&self, &rhs)
+        return add(&self, &rhs);
     }
 }
 
@@ -180,7 +180,7 @@ impl ops::Sub<V3> for V3 {
     type Output = V3;
 
     fn sub(self, rhs: V3) -> V3 {
-        return sub(&self, &rhs)
+        return sub(&self, &rhs);
     }
 }
 
@@ -188,7 +188,15 @@ impl ops::Mul<V3> for f64 {
     type Output = V3;
 
     fn mul(self, rhs: V3) -> Self::Output {
-        return mul(self, &rhs)
+        return mul(self, &rhs);
+    }
+}
+
+impl ops::Mul<V3> for V3 {
+    type Output = V3;
+
+    fn mul(self, rhs: V3) -> Self::Output {
+        return v(self.x * rhs.x, self.y * rhs.y, self.z * rhs.z);
     }
 }
 
@@ -196,7 +204,7 @@ impl ops::Mul<V3> for M3 {
     type Output = V3;
 
     fn mul(self, rhs: V3) -> Self::Output {
-        return rhs.x * self.v0 + rhs.y * self.v1 + rhs.z * self.v2
+        return rhs.x * self.v0 + rhs.y * self.v1 + rhs.z * self.v2;
     }
 }
 
@@ -208,10 +216,9 @@ impl ops::Mul<M3> for M3 {
             v0: self * rhs.v0,
             v1: self * rhs.v1,
             v2: self * rhs.v2,
-        }
+        };
     }
 }
-
 
 pub const B1: V3 = V3 {
     x: 1.,

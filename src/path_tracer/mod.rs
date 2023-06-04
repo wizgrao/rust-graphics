@@ -68,8 +68,8 @@ pub trait Object {
 }
 
 pub struct Solid {
-    bsdf: Arc<dyn BSDF>,
-    intersectable: Arc<dyn Intersectable>,
+    pub bsdf: Arc<dyn BSDF>,
+    pub intersectable: Arc<dyn Intersectable>,
 }
 
 impl Object for Solid {
@@ -91,16 +91,22 @@ pub fn estimated_total_radiance(o: &impl Object, r: &Ray) -> V3 {
 }
 
 fn estimated_zero_bounce_radiance(r: &Ray, p: &IntersectionWithBSDF) -> V3 {
-    return p.1.radiance(r.d);
+    let (_o2w, w2o) = object_world_matrices_from_intersection(&p.0);
+    return p.1.radiance(w2o * r.d);
 }
 
-fn bounce(r: &math::Ray, intersection: &Intersection) -> Ray {
+fn object_world_matrices_from_intersection(intersection: &Intersection) -> (math::M3, math::M3) {
     let o2w = math::M3 {
         v0: intersection.s,
         v1: math::cross(&intersection.n, &intersection.s),
         v2: intersection.n,
     };
     let w2o = o2w.t();
+    return (o2w, w2o);
+}
+
+fn bounce(r: &math::Ray, intersection: &Intersection) -> Ray {
+    let (o2w, w2o) = object_world_matrices_from_intersection(intersection);
     let d_o = w2o * r.d;
     let do_bounce = math::v(d_o.x, d_o.y, -d_o.z);
     let d_bounce = o2w * do_bounce;

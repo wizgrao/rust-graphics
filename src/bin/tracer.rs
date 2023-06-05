@@ -22,10 +22,9 @@ fn main() {
     println!("Starting image generation!");
     let start = Instant::now();
     let mut img2: ImageBuffer<image::Rgb<u8>, Vec<u8>> = ImageBuffer::new(w as u32, w as u32);
-    let yeet = 0usize..(w * w) as usize;
-    let beet = yeet.into_par_iter();
-    let ceet = beet.map(move |x| (x % w, x / w));
-    let fin: Vec<math::V3> = ceet
+    let pixel_vec: Vec<V3> = (0usize..(w * w) as usize)
+        .into_par_iter()
+        .map(move |x| (x % w, x / w))
         .map(move |(x, y)| {
             let s = math::Sphere {
                 x: math::v(-2.1, 0., 5.),
@@ -114,14 +113,13 @@ fn main() {
                                 d: math::normalize(&subpix_loc),
                             },
                         ))
-                    //dbg!(pix_sum);
                 }
             }
             return (1.0 / (anti_aliasing as f64 * anti_aliasing as f64)) * pix_sum;
         })
         .collect();
     for (x, y, p) in img2.enumerate_pixels_mut() {
-        let color = fin[(x + y * (w as u32)) as usize];
+        let color = pixel_vec[(x + y * (w as u32)) as usize];
         p.channels_mut()[0] = (color.x.abs() * 255.) as u8;
         p.channels_mut()[1] = (color.y.abs() * 255.) as u8;
         p.channels_mut()[2] = (color.z.abs() * 255.) as u8;

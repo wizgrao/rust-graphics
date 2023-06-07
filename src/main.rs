@@ -1,6 +1,6 @@
 use clap::Parser;
+use graphics::marcher::{render, Cap, Sphere, Torus};
 use graphics::math::{abs, add, dist, mul, normalize, sub, v, V3};
-use graphics::marcher::{render, Cap, Torus, Sphere};
 use image::buffer::ConvertBuffer;
 use image::error::ImageFormatHint::Exact;
 use image::GrayImage;

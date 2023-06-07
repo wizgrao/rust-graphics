@@ -89,20 +89,18 @@ impl Object for Cup {
     fn intersect(&self, r: &Ray) -> Option<IntersectionWithBSDF> {
         let mut ret: Option<IntersectionWithBSDF> = None;
         for object in self.objects.iter() {
-            let intersection = object.intersect(r) ;
+            let intersection = object.intersect(r);
             match (&ret, &intersection) {
                 (Some((retIntersection, _)), Some((newIntersection, bsdf))) => {
                     if retIntersection.t > newIntersection.t {
                         ret = object.intersect(r)
                     }
-                },
-                (None, Some(i)) => {
-                        ret = object.intersect(r)
-                },
-                _ => {},
+                }
+                (None, Some(i)) => ret = object.intersect(r),
+                _ => {}
             }
         }
-        return ret
+        return ret;
     }
 }
 
@@ -130,7 +128,7 @@ fn object_world_matrices_from_intersection(intersection: &Intersection) -> (math
     return (o2w, w2o);
 }
 
-fn bounce(r: &math::Ray, intersection: &Intersection) -> Ray {
+fn bounce(r: &Ray, intersection: &Intersection) -> Ray {
     let (o2w, w2o) = object_world_matrices_from_intersection(intersection);
     let d_o = w2o * r.d;
     let do_bounce = math::v(d_o.x, d_o.y, -d_o.z);
@@ -161,7 +159,9 @@ fn estimated_one_bounce_radiance(o: &impl Object, r: &Ray, p: &IntersectionWithB
     };
     match o.intersect(&new_ray) {
         None => math::O,
-        Some(new_p) => 1. / pdf * wi_o.z * estimated_zero_bounce_radiance(&new_ray, &new_p) * reflection,
+        Some(new_p) => {
+            1. / pdf * wi_o.z * estimated_zero_bounce_radiance(&new_ray, &new_p) * reflection
+        }
     }
 }
 

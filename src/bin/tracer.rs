@@ -84,9 +84,15 @@ fn main() {
                 intersectable: Arc::new(plane2),
             };
 
-           let obj3 = graphics::path_tracer::Cup {
-               objects: vec![Box::new(obj), Box::new(obj2), Box::new(obj4), Box::new(obj5), Box::new(obj6)],
-           };
+            let obj3 = graphics::path_tracer::Cup {
+                objects: vec![
+                    Box::new(obj),
+                    Box::new(obj2),
+                    Box::new(obj4),
+                    Box::new(obj5),
+                    Box::new(obj6),
+                ],
+            };
 
             let pix_width = 2. / w as f64;
             let loc = math::V3 {
@@ -129,8 +135,8 @@ fn main() {
 }
 
 fn tone_map1(x: f64) -> f64 {
-    return x/(1. + x)
+    return x / (1. + x);
 }
 fn tone_map(x: V3) -> V3 {
-    return math::v(tone_map1(x.x), tone_map1(x.y), tone_map1(x.z))
+    return math::v(tone_map1(x.x), tone_map1(x.y), tone_map1(x.z));
 }

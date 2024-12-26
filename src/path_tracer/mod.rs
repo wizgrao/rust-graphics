@@ -8,7 +8,7 @@ use rand_distr::StandardNormal;
 use std::f32::consts::PI;
 use std::sync::Arc;
 
-const TERMINATION_P: f64 = 0.1;
+const TERMINATION_P: f64 = 0.3;
 
 pub trait BSDF {
     fn sample_wi(&self, wo: V3) -> (f64, V3);

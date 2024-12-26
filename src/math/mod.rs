@@ -1,5 +1,7 @@
 use std::ops;
 
+pub const EPS: f64 = 1e-4;
+
 #[derive(Clone, Copy, Debug)]
 pub struct V3 {
     pub x: f64,
@@ -24,10 +26,17 @@ impl M3 {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Ray {
     pub x: V3,
     pub d: V3,
+}
+
+pub fn jitter_ray(r: Ray) -> Ray {
+    Ray {
+        x: r.x + 10. * EPS * r.d,
+        d: r.d,
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -37,7 +46,7 @@ pub struct Plane {
     pub s: V3,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Sphere {
     pub x: V3,
     pub r: f64,
@@ -54,6 +63,8 @@ pub struct Intersection {
 pub trait Intersectable {
     fn intersect(&self, r: &Ray) -> Option<Intersection>;
 }
+
+
 
 impl Intersectable for Plane {
     fn intersect(&self, r: &Ray) -> Option<Intersection> {
@@ -105,12 +116,12 @@ impl Intersectable for Sphere {
             v(0.0, n_unnormalized.z, -n_unnormalized.y)
         };
 
-        return Some(Intersection {
+        Some(Intersection {
             x: new_x,
             n: n_normalized,
             s: normalize(&s_unnormalized),
             t: t1,
-        });
+        })
     }
 }
 
@@ -172,7 +183,7 @@ impl ops::Add<V3> for V3 {
     type Output = V3;
 
     fn add(self, rhs: V3) -> V3 {
-        return add(&self, &rhs);
+        add(&self, &rhs)
     }
 }
 
@@ -180,7 +191,7 @@ impl ops::Sub<V3> for V3 {
     type Output = V3;
 
     fn sub(self, rhs: V3) -> V3 {
-        return sub(&self, &rhs);
+        sub(&self, &rhs)
     }
 }
 
@@ -188,7 +199,7 @@ impl ops::Mul<V3> for f64 {
     type Output = V3;
 
     fn mul(self, rhs: V3) -> Self::Output {
-        return mul(self, &rhs);
+        mul(self, &rhs)
     }
 }
 
@@ -196,7 +207,7 @@ impl ops::Mul<V3> for V3 {
     type Output = V3;
 
     fn mul(self, rhs: V3) -> Self::Output {
-        return v(self.x * rhs.x, self.y * rhs.y, self.z * rhs.z);
+        v(self.x * rhs.x, self.y * rhs.y, self.z * rhs.z)
     }
 }
 
@@ -204,7 +215,7 @@ impl ops::Mul<V3> for M3 {
     type Output = V3;
 
     fn mul(self, rhs: V3) -> Self::Output {
-        return rhs.x * self.v0 + rhs.y * self.v1 + rhs.z * self.v2;
+        rhs.x * self.v0 + rhs.y * self.v1 + rhs.z * self.v2
     }
 }
 
@@ -212,11 +223,11 @@ impl ops::Mul<M3> for M3 {
     type Output = M3;
 
     fn mul(self, rhs: M3) -> Self::Output {
-        return M3 {
+        M3 {
             v0: self * rhs.v0,
             v1: self * rhs.v1,
             v2: self * rhs.v2,
-        };
+        }
     }
 }
 

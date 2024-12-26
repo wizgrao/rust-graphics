@@ -64,8 +64,6 @@ pub trait Intersectable {
     fn intersect(&self, r: &Ray) -> Option<Intersection>;
 }
 
-
-
 impl Intersectable for Plane {
     fn intersect(&self, r: &Ray) -> Option<Intersection> {
         let t = (dot(&self.n, &self.x) - dot(&self.n, &r.x)) / dot(&self.n, &r.d);

@@ -65,7 +65,7 @@ fn main() {
                 bsdf: Arc::new(e3),
                 intersectable: Arc::new(s3),
             };
-             let plane = math::Plane {
+            let plane = math::Plane {
                 x: math::v(0., 1.1, 0.),
                 n: math::v(0., -1., 0.),
                 s: math::v(1., 0., 0.),
@@ -87,14 +87,8 @@ fn main() {
                 intersectable: Arc::new(plane2),
             };
 
-            let l1 = graphics::path_tracer::SphereLight {
-                sphere: s,
-                e,
-            };
-            let l2 = graphics::path_tracer::SphereLight {
-                sphere: s2,
-                e: e2,
-            };
+            let l1 = graphics::path_tracer::SphereLight { sphere: s, e };
+            let l2 = graphics::path_tracer::SphereLight { sphere: s2, e: e2 };
             let obj3 = graphics::path_tracer::Cup {
                 objects: vec![
                     Box::new(obj),
@@ -107,7 +101,9 @@ fn main() {
 
             let scene = graphics::path_tracer::Scene {
                 object: Box::new(obj3),
-                light: Box::new(CupLight{ lights: vec![Box::new(l1), Box::new(l2)] }),
+                light: Box::new(CupLight {
+                    lights: vec![Box::new(l1), Box::new(l2)],
+                }),
             };
 
             let pix_width = 2. / w as f64;

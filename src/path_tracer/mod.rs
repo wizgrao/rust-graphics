@@ -1,8 +1,8 @@
 use crate::math::Sphere;
 use crate::math::{Intersectable, Intersection, Ray};
 use crate::{math, V3};
-use rand::distributions::Standard;
 use rand::distributions::uniform::Uniform;
+use rand::distributions::Standard;
 use rand::{thread_rng, Rng};
 use rand_distr::StandardNormal;
 use std::f32::consts::PI;
@@ -98,7 +98,9 @@ pub trait Light {
 
 impl Object for Solid {
     fn intersect(&self, r: &Ray) -> Option<IntersectionWithBSDF> {
-        self.intersectable.intersect(r).map(|intersection| (intersection, self.bsdf.clone()))
+        self.intersectable
+            .intersect(r)
+            .map(|intersection| (intersection, self.bsdf.clone()))
     }
 }
 
@@ -141,12 +143,18 @@ impl Light for SphereLight {
             cos_dir = 0.0;
         }
 
-        (1.0 / (4.0 * PI as f64 * self.sphere.r * self.sphere.r) ,
-            Photon{ d: math::Ray{ d: dir, x: light_surface_point}, radiance: cos_dir * self.e.emission }
+        (
+            1.0 / (4.0 * PI as f64 * self.sphere.r * self.sphere.r),
+            Photon {
+                d: math::Ray {
+                    d: dir,
+                    x: light_surface_point,
+                },
+                radiance: cos_dir * self.e.emission,
+            },
         )
     }
 }
-
 
 pub struct CupLight {
     pub lights: Vec<Box<dyn Light>>,
@@ -156,19 +164,29 @@ impl Light for CupLight {
     fn sample_rad(&self, p: V3) -> (f64, Photon) {
         let num_lights = self.lights.len();
         if num_lights == 0 {
-            return (0. ,Photon{ d: Ray { x: math::O, d: math::O }, radiance: math::O});
+            return (
+                0.,
+                Photon {
+                    d: Ray {
+                        x: math::O,
+                        d: math::O,
+                    },
+                    radiance: math::O,
+                },
+            );
         }
         let index = thread_rng().sample(Uniform::new(0, num_lights));
         let light = &self.lights[index];
         let (pdf, photon) = light.sample_rad(p);
-        (pdf/(num_lights as f64), photon)
+        (pdf / (num_lights as f64), photon)
     }
 }
 
 pub fn estimated_total_radiance(o: &Scene, r: &Ray, imp: bool) -> V3 {
     match o.object.intersect(r) {
         Some(p) => {
-            estimated_zero_bounce_radiance(r, &p) + estimated_at_least_one_bounce_radiance(o, r, &p, imp)
+            estimated_zero_bounce_radiance(r, &p)
+                + estimated_at_least_one_bounce_radiance(o, r, &p, imp)
         }
         None => math::O,
     }
@@ -244,14 +262,14 @@ fn estimated_one_bounce_radiance_imp(s: &Scene, r: &Ray, p: &IntersectionWithBSD
     if obj_cos < 0.0 {
         obj_cos = -obj_cos
     }
-    
+
     if let Some((i, _)) = s.object.intersect(&shadow_ray) {
         if math::dist(&i.x, &intersection.x) > math::EPS {
             return math::O;
         }
     }
 
-    let reflection = (*bsdf).bsdf(d_o, -1.0 * (w2o*photon_sample.d.d));
+    let reflection = (*bsdf).bsdf(d_o, -1.0 * (w2o * photon_sample.d.d));
     let d = math::dist(&intersection.x, &photon_sample.d.x);
     (obj_cos / (light_pdf * d * d)) * photon_sample.radiance * reflection
 }
@@ -263,7 +281,11 @@ fn estimated_at_least_one_bounce_radiance(
     imp: bool,
 ) -> V3 {
     let o = &s.object;
-    let one_bounce = (if imp { estimated_one_bounce_radiance_imp } else {estimated_one_bounce_radiance })(s, r, p);
+    let one_bounce = (if imp {
+        estimated_one_bounce_radiance_imp
+    } else {
+        estimated_one_bounce_radiance
+    })(s, r, p);
 
     let thresh: f64 = thread_rng().sample(Standard);
     if thresh < TERMINATION_P {

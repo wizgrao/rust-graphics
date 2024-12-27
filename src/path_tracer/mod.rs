@@ -8,7 +8,11 @@ use rand_distr::StandardNormal;
 use std::f32::consts::PI;
 use std::sync::Arc;
 
-const TERMINATION_P: f64 = 0.3;
+pub struct RenderContext {
+    pub imp: bool,
+    pub max_bounces: i32,
+    pub termination_p: f64,
+}
 
 pub trait BSDF {
     fn sample_wi(&self, wo: V3) -> (f64, V3);
@@ -116,10 +120,10 @@ impl Object for Cup {
             match (&ret, &intersection) {
                 (Some((ret_intersection, _)), Some((new_intersection, _))) => {
                     if ret_intersection.t > new_intersection.t {
-                        ret = object.intersect(r)
+                        ret = intersection;
                     }
                 }
-                (None, Some(_)) => ret = object.intersect(r),
+                (None, Some(_)) => ret = intersection,
                 _ => {}
             }
         }
@@ -182,11 +186,11 @@ impl Light for CupLight {
     }
 }
 
-pub fn estimated_total_radiance(o: &Scene, r: &Ray, imp: bool) -> V3 {
+pub fn estimated_total_radiance(ctx: &RenderContext, o: &Scene, r: &Ray) -> V3 {
     match o.object.intersect(r) {
         Some(p) => {
             estimated_zero_bounce_radiance(r, &p)
-                + estimated_at_least_one_bounce_radiance(o, r, &p, imp)
+                + estimated_at_least_one_bounce_radiance(ctx, o, r, &p, 0)
         }
         None => math::O,
     }
@@ -264,31 +268,35 @@ fn estimated_one_bounce_radiance_imp(s: &Scene, r: &Ray, p: &IntersectionWithBSD
     }
 
     if let Some((i, _)) = s.object.intersect(&shadow_ray) {
-        if math::dist(&i.x, &intersection.x) > math::EPS {
+        if math::dist(&i.x, &intersection.x) > 1. * math::EPS {
             return math::O;
         }
     }
 
     let reflection = (*bsdf).bsdf(d_o, -1.0 * (w2o * photon_sample.d.d));
-    let d = math::dist(&intersection.x, &photon_sample.d.x);
-    (obj_cos / (light_pdf * d * d)) * photon_sample.radiance * reflection
+    let d2 = math::abs2(&(intersection.x - photon_sample.d.x));
+    (obj_cos / (light_pdf * d2)) * photon_sample.radiance * reflection
 }
 
 fn estimated_at_least_one_bounce_radiance(
+    ctx: &RenderContext,
     s: &Scene,
     r: &Ray,
     p: &IntersectionWithBSDF,
-    imp: bool,
+    bounce: i32,
 ) -> V3 {
+    if bounce >= ctx.max_bounces {
+        return math::O;
+    }
     let o = &s.object;
-    let one_bounce = (if imp {
+    let one_bounce = (if ctx.imp {
         estimated_one_bounce_radiance_imp
     } else {
         estimated_one_bounce_radiance
     })(s, r, p);
 
     let thresh: f64 = thread_rng().sample(Standard);
-    if thresh < TERMINATION_P {
+    if thresh < ctx.termination_p {
         return one_bounce;
     }
     let (intersection, bsdf) = p;
@@ -311,9 +319,9 @@ fn estimated_at_least_one_bounce_radiance(
     match o.intersect(&new_ray) {
         None => one_bounce,
         Some(new_p) => {
-            1. / pdf / (1. - TERMINATION_P)
+            1. / pdf / (1. - ctx.termination_p)
                 * wi_o.z
-                * estimated_at_least_one_bounce_radiance(s, &new_ray, &new_p, imp)
+                * estimated_at_least_one_bounce_radiance(ctx, s, &new_ray, &new_p, bounce + 1)
                 * reflection
                 + one_bounce
         }

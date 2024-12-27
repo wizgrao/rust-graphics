@@ -34,7 +34,7 @@ pub struct Ray {
 
 pub fn jitter_ray(r: Ray) -> Ray {
     Ray {
-        x: r.x + 10. * EPS * r.d,
+        x: r.x + 1. * EPS * r.d,
         d: r.d,
     }
 }

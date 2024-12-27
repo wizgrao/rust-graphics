@@ -21,6 +21,12 @@ struct Args {
 
     #[arg(short, long, default_value = "out.png")]
     out: String,
+
+    #[arg(short, long, default_value_t = 6)]
+    bounces: i32,
+
+    #[arg(short, long, default_value_t = 0.3)]
+    termination_p: f64,
 }
 fn main() {
     let args = Args::parse();
@@ -37,7 +43,7 @@ fn main() {
                 r: 1.,
             };
             let e = graphics::path_tracer::Emissive {
-                emission: math::v(8., 0., 8.),
+                emission: math::v(2., 0., 2.),
             };
             let obj = graphics::path_tracer::Solid {
                 bsdf: Arc::new(e),
@@ -48,7 +54,7 @@ fn main() {
                 r: 1.,
             };
             let e2 = graphics::path_tracer::Emissive {
-                emission: math::v(0., 8., 8.),
+                emission: math::v(0., 2., 2.),
             };
             let obj2 = graphics::path_tracer::Solid {
                 bsdf: Arc::new(e2),
@@ -110,7 +116,7 @@ fn main() {
             let loc = math::V3 {
                 x: (2. * x as f64) / w as f64 - 1.,
                 y: (2. * y as f64) / w as f64 - 1.,
-                z: 2.,
+                z: 4.,
             };
             let anti_aliasing = args.antialias;
             let subpixel_width = pix_width / anti_aliasing as f64;
@@ -125,12 +131,16 @@ fn main() {
                     let subpix_loc = loc + jitter;
                     pix_sum = pix_sum
                         + graphics::path_tracer::estimated_total_radiance(
+                            &graphics::path_tracer::RenderContext {
+                                imp: args.imp,
+                                max_bounces: args.bounces,
+                                termination_p: args.termination_p,
+                            },
                             &scene,
                             &math::Ray {
                                 x: math::O,
                                 d: math::normalize(&subpix_loc),
                             },
-                            args.imp,
                         )
                 }
             }

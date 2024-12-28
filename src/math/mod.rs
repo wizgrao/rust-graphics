@@ -26,10 +26,24 @@ impl M3 {
     }
 }
 
+
+#[derive(Clone, Copy, Debug)]
+pub struct Transform {
+    pub mat: M3,
+    pub trans: V3,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct Ray {
     pub x: V3,
     pub d: V3,
+}
+
+pub fn transform_ray(t: Transform, r: &Ray) -> Ray {
+    Ray {
+        x: t.mat * r.x + t.trans,
+        d: t.mat * r.d,
+    }
 }
 
 pub fn jitter_ray(r: Ray) -> Ray {
@@ -39,11 +53,42 @@ pub fn jitter_ray(r: Ray) -> Ray {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Plane {
     pub x: V3,
     pub n: V3,
     pub s: V3,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Triangle {
+    pub v0: V3,
+    pub v1: V3,
+    pub v2: V3,
+}
+
+impl Intersectable for Triangle {
+    // https://cs184.eecs.berkeley.edu/sp24/lecture/9-20/ray-tracing-and-acceleration-str
+    fn intersect(&self, r: &Ray) -> Option<Intersection> {
+        let e1 = self.v1 - self.v0;
+        let e2 = self.v2 - self.v0;
+        let s = r.x - self.v0;
+        let s1 = cross(&r.d, &e2);
+        let s2 = cross(&s, &e1);
+        let coeff = 1.0 / dot(&s1, &e1);
+        let t = coeff * dot(&s2, &e2);
+        let b1 = coeff * dot(&s1, &s);
+        let b2 = coeff * dot(&s2, &r.d);
+        if b1 < 0.0 || b2 < 0.0 || b1 + b2 > 1.0 || t < 0. {
+            return None;
+        }
+        Some(Intersection {
+            x: r.x + t * r.d,
+            n: normalize(&cross(&e1, &e2)),
+            s: normalize(&e1),
+            t,
+        })
+    }
 }
 
 #[derive(Clone, Copy, Debug)]

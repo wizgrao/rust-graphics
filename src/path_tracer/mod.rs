@@ -1,4 +1,4 @@
-use crate::math::Sphere;
+use crate::math::{Sphere, Triangle, M3};
 use crate::math::{Intersectable, Intersection, Ray};
 use crate::{math, V3};
 use rand::distributions::uniform::Uniform;
@@ -7,11 +7,16 @@ use rand::{thread_rng, Rng};
 use rand_distr::StandardNormal;
 use std::f32::consts::PI;
 use std::sync::Arc;
+pub mod obj;
+
+use obj::*;
 
 pub struct RenderContext {
     pub imp: bool,
     pub max_bounces: i32,
     pub termination_p: f64,
+    pub light_samples: i32,
+    pub preview: bool,
 }
 
 pub trait BSDF {
@@ -19,6 +24,39 @@ pub trait BSDF {
     fn bsdf(&self, wo: math::V3, wi: math::V3) -> math::V3;
     fn radiance(&self, wo: math::V3) -> math::V3;
 }
+
+fn obj_to_triangles(objs: Vec<ObjLine>) -> Vec<Triangle> {
+    let mut triangles: Vec<Triangle> = Vec::new();
+    let mut vertices: Vec<V3> = Vec::new();
+    for obj_line in objs {
+        match obj_line {
+            ObjLine::Vertex(x, y, z) => vertices.push(V3 { x, y, z }),
+            ObjLine::Face(i, j, k) => triangles.push(math::Triangle{
+                v0: vertices[get_index_from_face(i)],
+                v1: vertices[get_index_from_face(j)],
+                v2: vertices[get_index_from_face(k)],
+            }),
+            _ => {}
+        }
+    }
+    triangles
+}
+
+fn obj_to_solid(objs: Vec<ObjLine>, bsdf: Arc<dyn BSDF>) -> Cup {
+    Cup {
+        objects: obj_to_triangles(objs).into_iter().map(|t| Box::new(Solid{ bsdf, intersectable: bsdf.clone() })).collect()
+    }
+}
+
+fn get_index_from_face(f: FaceVertex) -> usize {
+    match f {
+        FaceVertex::Vertex(i) => i as usize,
+        FaceVertex::VertexNormal(i, _) => i as usize,
+        FaceVertex::VertexTexture(i, _) => i as usize,
+        FaceVertex::VertexTextureNormal(i, _, _) => i as usize,
+    }
+}
+
 
 #[derive(Clone, Copy, Debug)]
 pub struct Lambertian {
@@ -52,6 +90,8 @@ fn sample_sphere() -> V3 {
     let z: f64 = thread_rng().sample(StandardNormal);
     math::normalize(&math::v(x, y, z))
 }
+
+
 
 impl BSDF for Lambertian {
     fn sample_wi(&self, _wo: V3) -> (f64, V3) {
@@ -110,6 +150,24 @@ impl Object for Solid {
 
 pub struct Cup {
     pub objects: Vec<Box<dyn Object>>,
+}
+
+
+pub struct TransformedObject<O: Object> {
+    pub wrapped: O,
+    pub transform: math::Transform,
+}
+
+impl<O: Object> TransformedObject<O> {
+    pub fn new(wrapped: O, transform: math::Transform) -> Self {
+        Self { wrapped, transform }
+    }
+}
+
+impl<O: Object> Object for TransformedObject<O> {
+    fn intersect(&self, r: &Ray) -> Option<IntersectionWithBSDF> {
+        self.wrapped.intersect(&math::transform_ray(self.transform, r))
+    }
 }
 
 impl Object for Cup {
@@ -189,10 +247,26 @@ impl Light for CupLight {
 pub fn estimated_total_radiance(ctx: &RenderContext, o: &Scene, r: &Ray) -> V3 {
     match o.object.intersect(r) {
         Some(p) => {
-            estimated_zero_bounce_radiance(r, &p)
-                + estimated_at_least_one_bounce_radiance(ctx, o, r, &p, 0)
+            if ctx.preview {
+                normalize_elems(math::normalize(&p.0.n))
+            } else {
+                estimated_zero_bounce_radiance(r, &p)
+                    + estimated_at_least_one_bounce_radiance(ctx, o, r, &p, 0)
+            }
         }
         None => math::O,
+    }
+}
+
+fn normalize_elems(s: V3) -> V3 {
+    math::v(abs1(s.x), abs1(s.y), abs1(s.z))
+}
+
+fn abs1(x: f64) -> f64 {
+    if x > 0. {
+        x
+    } else {
+        -x
     }
 }
 
@@ -222,7 +296,12 @@ fn _bounce(r: &Ray, intersection: &Intersection) -> Ray {
     }
 }
 
-fn estimated_one_bounce_radiance(s: &Scene, r: &Ray, p: &IntersectionWithBSDF) -> V3 {
+fn estimated_one_bounce_radiance(
+    _ctx: &RenderContext,
+    s: &Scene,
+    r: &Ray,
+    p: &IntersectionWithBSDF,
+) -> V3 {
     let o = &s.object;
     let (intersection, bsdf) = p;
     let o2w = math::M3 {
@@ -249,7 +328,12 @@ fn estimated_one_bounce_radiance(s: &Scene, r: &Ray, p: &IntersectionWithBSDF) -
     }
 }
 
-fn estimated_one_bounce_radiance_imp(s: &Scene, r: &Ray, p: &IntersectionWithBSDF) -> V3 {
+fn estimated_one_bounce_radiance_imp(
+    ctx: &RenderContext,
+    s: &Scene,
+    r: &Ray,
+    p: &IntersectionWithBSDF,
+) -> V3 {
     let (intersection, bsdf) = p;
     let o2w = math::M3 {
         v0: intersection.s,
@@ -259,23 +343,28 @@ fn estimated_one_bounce_radiance_imp(s: &Scene, r: &Ray, p: &IntersectionWithBSD
     let w2o = o2w.t();
     let d_o = w2o * r.d;
 
-    let (light_pdf, photon_sample) = s.light.sample_rad(intersection.x);
-    let shadow_ray = math::jitter_ray(photon_sample.d);
+    let mut light_sum = math::O;
 
-    let mut obj_cos = math::dot(&intersection.n, &(-1.0 * photon_sample.d.d));
-    if obj_cos < 0.0 {
-        obj_cos = -obj_cos
-    }
+    for _ in 0..ctx.light_samples {
+        let (light_pdf, photon_sample) = s.light.sample_rad(intersection.x);
+        let shadow_ray = math::jitter_ray(photon_sample.d);
 
-    if let Some((i, _)) = s.object.intersect(&shadow_ray) {
-        if math::dist(&i.x, &intersection.x) > 1. * math::EPS {
-            return math::O;
+        let mut obj_cos = math::dot(&intersection.n, &(-1.0 * photon_sample.d.d));
+        if obj_cos < 0.0 {
+            obj_cos = -obj_cos
         }
-    }
 
-    let reflection = (*bsdf).bsdf(d_o, -1.0 * (w2o * photon_sample.d.d));
-    let d2 = math::abs2(&(intersection.x - photon_sample.d.x));
-    (obj_cos / (light_pdf * d2)) * photon_sample.radiance * reflection
+        if let Some((i, _)) = s.object.intersect(&shadow_ray) {
+            if math::dist(&i.x, &intersection.x) > 1. * math::EPS {
+                continue;
+            }
+        }
+
+        let reflection = (*bsdf).bsdf(d_o, -1.0 * (w2o * photon_sample.d.d));
+        let d2 = math::abs2(&(intersection.x - photon_sample.d.x));
+        light_sum = light_sum + (obj_cos / (light_pdf * d2)) * photon_sample.radiance * reflection;
+    }
+    1.0 / (ctx.light_samples as f64) * light_sum
 }
 
 fn estimated_at_least_one_bounce_radiance(
@@ -293,7 +382,7 @@ fn estimated_at_least_one_bounce_radiance(
         estimated_one_bounce_radiance_imp
     } else {
         estimated_one_bounce_radiance
-    })(s, r, p);
+    })(ctx, s, r, p);
 
     let thresh: f64 = thread_rng().sample(Standard);
     if thresh < ctx.termination_p {

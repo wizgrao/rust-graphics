@@ -14,3 +14,4 @@ rayon = "1.6.0"
 rand = "0.8.5"
 rand_distr = "0.4.3"
 clap = { version = "4.0.29", features = ["derive"] }
+chumsky = "0.9.3"

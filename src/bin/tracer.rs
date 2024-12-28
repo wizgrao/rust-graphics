@@ -16,14 +16,20 @@ struct Args {
     #[arg(short, long, default_value_t = 5)]
     antialias: u32,
 
-    #[arg(short, long, default_value_t = false)]
+    #[arg(short, long, default_value_t = true)]
     imp: bool,
+
+    #[arg(short, long, default_value_t = false)]
+    preview: bool,
 
     #[arg(short, long, default_value = "out.png")]
     out: String,
 
     #[arg(short, long, default_value_t = 6)]
     bounces: i32,
+
+    #[arg(short, long, default_value_t = 100)]
+    light_samples: i32,
 
     #[arg(short, long, default_value_t = 0.3)]
     termination_p: f64,
@@ -38,75 +44,89 @@ fn main() {
         .into_par_iter()
         .map(move |x| (x % w, x / w))
         .map(move |(x, y)| {
-            let s = math::Sphere {
-                x: math::v(-2.1, 0., 15.),
-                r: 1.,
+            let left_sphere_light = math::Sphere {
+                x: math::v(-20.1, 0., -15.),
+                r: 0.5,
             };
-            let e = graphics::path_tracer::Emissive {
-                emission: math::v(2., 0., 2.),
+            let pink_light = graphics::path_tracer::Emissive {
+                emission: math::v(6400., 0., 6400.),
             };
-            let obj = graphics::path_tracer::Solid {
-                bsdf: Arc::new(e),
-                intersectable: Arc::new(s),
+            let pink_ball_obj = graphics::path_tracer::Solid {
+                bsdf: Arc::new(pink_light),
+                intersectable: Arc::new(left_sphere_light),
             };
-            let s2 = math::Sphere {
-                x: math::v(2.1, 0., 15.),
-                r: 1.,
+            let right_sphere_light = math::Sphere {
+                x: math::v(20.1, 0., -15.),
+                r: 0.5,
             };
-            let e2 = graphics::path_tracer::Emissive {
-                emission: math::v(0., 2., 2.),
+            let turquoise_light = graphics::path_tracer::Emissive {
+                emission: math::v(0., 6400., 6400.),
             };
-            let obj2 = graphics::path_tracer::Solid {
-                bsdf: Arc::new(e2),
-                intersectable: Arc::new(s2),
+            let turquoise_ball_obj = graphics::path_tracer::Solid {
+                bsdf: Arc::new(turquoise_light),
+                intersectable: Arc::new(right_sphere_light),
             };
-            let s3 = math::Sphere {
+            let middle_sphere = math::Sphere {
                 x: math::v(0., 0., 16.),
                 r: 1.,
             };
-            let e3 = graphics::path_tracer::Lambertian {
-                reflectance: math::v(1., 1., 1.),
+
+            let middle_triangle = math::Triangle {
+                v1: math::v(1., -1., 16.),
+                v0: math::v(-1.0, -1., 16.),
+                v2: math::v(0., 1., 16.),
             };
-            let obj4 = graphics::path_tracer::Solid {
-                bsdf: Arc::new(e3),
-                intersectable: Arc::new(s3),
+            let grey_diffuse = graphics::path_tracer::Lambertian {
+                reflectance: math::v(0.5, 0.5, 0.5),
             };
-            let plane = math::Plane {
-                x: math::v(0., 1.1, 0.),
+            let middle_ball_obj = graphics::path_tracer::Solid {
+                bsdf: Arc::new(grey_diffuse),
+                intersectable: Arc::new(middle_sphere),
+            };
+            let middle_triangle_obj = graphics::path_tracer::Solid {
+                bsdf: Arc::new(grey_diffuse),
+                intersectable: Arc::new(middle_triangle),
+            };
+            let top_plane = math::Plane {
+                x: math::v(0., 5.1, 0.),
                 n: math::v(0., -1., 0.),
                 s: math::v(1., 0., 0.),
             };
-            let e4 = graphics::path_tracer::Lambertian {
-                reflectance: math::v(1., 1., 1.),
+            let top_plane_obj = graphics::path_tracer::Solid {
+                bsdf: Arc::new(grey_diffuse),
+                intersectable: Arc::new(top_plane),
             };
-            let obj5 = graphics::path_tracer::Solid {
-                bsdf: Arc::new(e4),
-                intersectable: Arc::new(plane),
-            };
-            let plane2 = math::Plane {
-                x: math::v(0., -3.1, 0.),
+            let bottom_plane = math::Plane {
+                x: math::v(0., -6.1, 0.),
                 n: math::v(0., 1., 0.),
                 s: math::v(1., 0., 0.),
             };
-            let obj6 = graphics::path_tracer::Solid {
-                bsdf: Arc::new(e4),
-                intersectable: Arc::new(plane2),
+            let bottom_plane_obj = graphics::path_tracer::Solid {
+                bsdf: Arc::new(grey_diffuse),
+                intersectable: Arc::new(bottom_plane),
             };
 
-            let l1 = graphics::path_tracer::SphereLight { sphere: s, e };
-            let l2 = graphics::path_tracer::SphereLight { sphere: s2, e: e2 };
-            let obj3 = graphics::path_tracer::Cup {
+            let l1 = graphics::path_tracer::SphereLight {
+                sphere: left_sphere_light,
+                e: pink_light,
+            };
+            let l2 = graphics::path_tracer::SphereLight {
+                sphere: right_sphere_light,
+                e: turquoise_light,
+            };
+            let combined_objects = graphics::path_tracer::Cup {
                 objects: vec![
-                    Box::new(obj),
-                    Box::new(obj2),
-                    Box::new(obj4),
-                    Box::new(obj5),
-                    Box::new(obj6),
+                    Box::new(pink_ball_obj),
+                    Box::new(turquoise_ball_obj),
+                    Box::new(middle_triangle_obj),
+                    //Box::new(middle_ball_obj),
+                    //Box::new(top_plane_obj),
+                    //Box::new(bottom_plane_obj),
                 ],
             };
 
             let scene = graphics::path_tracer::Scene {
-                object: Box::new(obj3),
+                object: Box::new(combined_objects),
                 light: Box::new(CupLight {
                     lights: vec![Box::new(l1), Box::new(l2)],
                 }),
@@ -135,6 +155,8 @@ fn main() {
                                 imp: args.imp,
                                 max_bounces: args.bounces,
                                 termination_p: args.termination_p,
+                                light_samples: args.light_samples,
+                                preview: args.preview,
                             },
                             &scene,
                             &math::Ray {

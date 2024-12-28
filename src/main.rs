@@ -1,23 +1,17 @@
 use clap::Parser;
 use graphics::marcher::{render, Cap, Sphere, Torus};
-use graphics::math::{abs, add, dist, mul, normalize, sub, v, V3};
+use graphics::math::{normalize, v, V3};
 use image::buffer::ConvertBuffer;
-use image::error::ImageFormatHint::Exact;
-use image::GrayImage;
-use image::{GenericImage, GenericImageView, ImageBuffer, Rgb, RgbImage};
+use image::{ImageBuffer, Rgb};
 use rayon::prelude::*;
-use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-/// Simple program to greet a person
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    /// Name of the person to greet
     #[arg(short, long, default_value_t = 512)]
     size: u32,
 
-    /// Number of times to greet
     #[arg(short, long, default_value_t = 2)]
     antialias: u32,
 }
@@ -28,7 +22,7 @@ fn main() {
     println!("Starting image generation!");
     let start = Instant::now();
     let w = args.size;
-    let mut img2: ImageBuffer<image::Luma<f64>, Vec<f64>> = ImageBuffer::new(w, w);
+    let mut img2: ImageBuffer<image::Luma<u16>, Vec<u16>> = ImageBuffer::new(w, w);
     img2.par_iter_mut()
         .enumerate()
         .map(|(i, p)| (i as u32 % w, i as u32 / w, p))
@@ -55,14 +49,14 @@ fn main() {
                 renderables: vec![Box::new(s), Box::new(t)],
             };
 
-            let pix_width = 2. / w as f32;
+            let pix_width = 2. / w as f64;
             let loc = V3 {
                 x: (2. * x as f64) / w as f64 - 1.,
                 y: (2. * y as f64) / w as f64 - 1.,
                 z: 2.,
             };
             let anti_aliasing = args.antialias;
-            let subpixel_width = pix_width / anti_aliasing as f32;
+            let subpixel_width = pix_width / anti_aliasing as f64;
             let mut pix_sum = 0.;
             for x_jitter in 0..anti_aliasing {
                 for y_jitter in 0..anti_aliasing {
@@ -76,7 +70,7 @@ fn main() {
                 }
             }
 
-            *p = pix_sum / (anti_aliasing as f64 * anti_aliasing as f64)
+            *p = (pix_sum / (anti_aliasing as f64 * anti_aliasing as f64) * 256.) as u16
         });
     println!("Render took {} s", start.elapsed().as_secs_f32());
     let a: ImageBuffer<Rgb<u16>, Vec<u16>> = img2.convert();

@@ -1,5 +1,5 @@
-use crate::math::{Sphere, Triangle, M3};
 use crate::math::{Intersectable, Intersection, Ray};
+use crate::math::{Sphere, Triangle};
 use crate::{math, V3};
 use rand::distributions::uniform::Uniform;
 use rand::distributions::Standard;
@@ -25,16 +25,20 @@ pub trait BSDF {
     fn radiance(&self, wo: math::V3) -> math::V3;
 }
 
-fn obj_to_triangles(objs: Vec<ObjLine>) -> Vec<Triangle> {
+pub fn obj_to_triangles(objs: &Vec<ObjLine>) -> Vec<Triangle> {
     let mut triangles: Vec<Triangle> = Vec::new();
     let mut vertices: Vec<V3> = Vec::new();
     for obj_line in objs {
         match obj_line {
-            ObjLine::Vertex(x, y, z) => vertices.push(V3 { x, y, z }),
-            ObjLine::Face(i, j, k) => triangles.push(math::Triangle{
-                v0: vertices[get_index_from_face(i)],
-                v1: vertices[get_index_from_face(j)],
-                v2: vertices[get_index_from_face(k)],
+            ObjLine::Vertex(x, y, z) => vertices.push(V3 {
+                x: *x,
+                y: *y,
+                z: *z,
+            }),
+            ObjLine::Face(i, j, k) => triangles.push(math::Triangle {
+                v0: vertices[get_index_from_face(*i) - 1],
+                v1: vertices[get_index_from_face(*j) - 1],
+                v2: vertices[get_index_from_face(*k) - 1],
             }),
             _ => {}
         }
@@ -42,9 +46,17 @@ fn obj_to_triangles(objs: Vec<ObjLine>) -> Vec<Triangle> {
     triangles
 }
 
-fn obj_to_solid(objs: Vec<ObjLine>, bsdf: Arc<dyn BSDF>) -> Cup {
+pub fn obj_to_solid(objs: &Vec<ObjLine>, bsdf: Arc<dyn BSDF>) -> Cup {
     Cup {
-        objects: obj_to_triangles(objs).into_iter().map(|t| Box::new(Solid{ bsdf, intersectable: bsdf.clone() })).collect()
+        objects: obj_to_triangles(objs)
+            .into_iter()
+            .map(|t| {
+                Box::new(Solid {
+                    bsdf: bsdf.clone(),
+                    intersectable: Arc::new(t),
+                }) as Box<dyn Object>
+            })
+            .collect(),
     }
 }
 
@@ -56,7 +68,6 @@ fn get_index_from_face(f: FaceVertex) -> usize {
         FaceVertex::VertexTextureNormal(i, _, _) => i as usize,
     }
 }
-
 
 #[derive(Clone, Copy, Debug)]
 pub struct Lambertian {
@@ -90,8 +101,6 @@ fn sample_sphere() -> V3 {
     let z: f64 = thread_rng().sample(StandardNormal);
     math::normalize(&math::v(x, y, z))
 }
-
-
 
 impl BSDF for Lambertian {
     fn sample_wi(&self, _wo: V3) -> (f64, V3) {
@@ -152,7 +161,6 @@ pub struct Cup {
     pub objects: Vec<Box<dyn Object>>,
 }
 
-
 pub struct TransformedObject<O: Object> {
     pub wrapped: O,
     pub transform: math::Transform,
@@ -166,7 +174,8 @@ impl<O: Object> TransformedObject<O> {
 
 impl<O: Object> Object for TransformedObject<O> {
     fn intersect(&self, r: &Ray) -> Option<IntersectionWithBSDF> {
-        self.wrapped.intersect(&math::transform_ray(self.transform, r))
+        self.wrapped
+            .intersect(&math::transform_ray(self.transform, r))
     }
 }
 

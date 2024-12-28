@@ -1,4 +1,5 @@
 use std::ops;
+use std::ops::Neg;
 
 pub const EPS: f64 = 1e-4;
 
@@ -24,8 +25,11 @@ impl M3 {
             v2: v(self.v0.z, self.v1.z, self.v2.z),
         }
     }
-}
 
+    pub fn new(v0: V3, v1: V3, v2: V3) -> M3 {
+        M3 { v0, v1, v2 }
+    }
+}
 
 #[derive(Clone, Copy, Debug)]
 pub struct Transform {
@@ -274,6 +278,13 @@ impl ops::Mul<M3> for M3 {
     }
 }
 
+impl Neg for V3 {
+    type Output = Self;
+    fn neg(self) -> V3 {
+        -1. * self
+    }
+}
+
 pub const B1: V3 = V3 {
     x: 1.,
     y: 0.,
@@ -290,6 +301,12 @@ pub const B3: V3 = V3 {
     x: 0.,
     y: 0.,
     z: 1.,
+};
+
+pub const I: M3 = M3 {
+    v0: B1,
+    v1: B2,
+    v2: B3,
 };
 
 pub const O: V3 = V3 {

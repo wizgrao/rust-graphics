@@ -1,6 +1,6 @@
 use clap::Parser;
 use graphics::math;
-use graphics::math::V3;
+use graphics::math::{B1, B2, B3, V3};
 use graphics::path_tracer::CupLight;
 use image::{ImageBuffer, Pixel};
 use rayon::iter::IntoParallelIterator;
@@ -39,6 +39,7 @@ fn main() {
     let w = args.size;
     println!("Starting image generation!");
     let start = Instant::now();
+    let monke_obj = Arc::new(graphics::path_tracer::obj::read_obj_file("monkey.obj").unwrap());
     let mut img2: ImageBuffer<image::Rgb<u8>, Vec<u8>> = ImageBuffer::new(w as u32, w as u32);
     let pixel_vec: Vec<V3> = (0usize..(w * w))
         .into_par_iter()
@@ -105,7 +106,15 @@ fn main() {
                 bsdf: Arc::new(grey_diffuse),
                 intersectable: Arc::new(bottom_plane),
             };
-
+            let monke_object =
+                graphics::path_tracer::obj_to_solid(&monke_obj.clone(), Arc::new(grey_diffuse));
+            let transformed_monke_object = graphics::path_tracer::TransformedObject::new(
+                monke_object,
+                math::Transform {
+                    mat: math::M3::new(B1, -B2, -B3),
+                    trans: math::v(0., 0., 8.),
+                },
+            );
             let l1 = graphics::path_tracer::SphereLight {
                 sphere: left_sphere_light,
                 e: pink_light,
@@ -114,11 +123,13 @@ fn main() {
                 sphere: right_sphere_light,
                 e: turquoise_light,
             };
+
             let combined_objects = graphics::path_tracer::Cup {
                 objects: vec![
                     Box::new(pink_ball_obj),
                     Box::new(turquoise_ball_obj),
-                    Box::new(middle_triangle_obj),
+                    Box::new(transformed_monke_object),
+                    //Box::new(middle_triangle_obj),
                     //Box::new(middle_ball_obj),
                     //Box::new(top_plane_obj),
                     //Box::new(bottom_plane_obj),

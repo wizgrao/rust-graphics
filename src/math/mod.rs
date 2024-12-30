@@ -37,6 +37,21 @@ pub struct Transform {
     pub trans: V3,
 }
 
+impl Transform {
+    pub fn invert(&self) -> Transform {
+        Transform {
+            mat: self.mat.t(),
+            trans: self.mat.t() * (-1. * self.trans),
+        }
+    }
+    pub fn do_linear(&self, x: V3) -> V3 {
+        self.mat * x
+    }
+    pub fn do_affine(&self, x: V3) -> V3 {
+        self.mat * x + self.trans
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct Ray {
     pub x: V3,
@@ -69,6 +84,12 @@ pub struct Triangle {
     pub v0: V3,
     pub v1: V3,
     pub v2: V3,
+}
+
+impl Triangle {
+    pub fn new(v0: V3, v1: V3, v2: V3) -> Triangle {
+        Triangle { v0, v1, v2 }
+    }
 }
 
 impl Intersectable for Triangle {

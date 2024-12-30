@@ -1,5 +1,7 @@
 use clap::Parser;
-use graphics::math::{B1, B2, B3, V3};
+use graphics::math::{Triangle, B1, B2, B3, V3};
+use graphics::path_tracer::obj;
+use graphics::path_tracer::obj::ObjLine;
 use graphics::path_tracer::primitives::CupLight;
 use graphics::{math, path_tracer};
 use image::{ImageBuffer, Pixel};
@@ -7,6 +9,7 @@ use rayon::iter::IntoParallelIterator;
 use rayon::prelude::*;
 use std::sync::Arc;
 use std::time::Instant;
+
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
@@ -31,21 +34,52 @@ struct Args {
     #[arg(short, long, default_value_t = 100)]
     light_samples: i32,
 
+    #[arg(short, long, default_value_t = 10)]
+    min_leaf_size: usize,
+
     #[arg(short, long, default_value_t = 0.3)]
     termination_p: f64,
+
+    #[arg(short, long, default_value_t = 10)]
+    replicas: i32,
 }
 fn main() {
     let args = Args::parse();
     let w = args.size;
-    println!("Starting image generation!");
-    let start = Instant::now();
+    println!("initializing scene");
+    let mut start = Instant::now();
     let grey_diffuse = path_tracer::primitives::Lambertian {
         reflectance: math::v(0.7, 0.7, 0.7),
     };
-    let monke_obj = Arc::new(graphics::path_tracer::obj::read_obj_file("monkey.obj").unwrap());
-    let monke_object = Arc::new(graphics::path_tracer::primitives::obj_to_solid(
-        &monke_obj.clone(),
+    let monke_obj = graphics::path_tracer::obj::read_obj_file("monkey.obj").unwrap();
+    let monke_triangles = path_tracer::primitives::obj_to_triangles(&monke_obj);
+    let mut monke_triangles_transformed: Vec<Vec<Triangle>> = Vec::new();
+    for i in -args.replicas..=args.replicas {
+        for j in -args.replicas..=args.replicas {
+            let translate = 3.0 * i as f64 * B1 + 3. * j as f64 * B2;
+            monke_triangles_transformed.push(
+                monke_triangles
+                    .iter()
+                    .map(|math::Triangle { v0, v1, v2 }| Triangle {
+                        v0: *v0 + translate,
+                        v1: *v1 + translate,
+                        v2: *v2 + translate,
+                    })
+                    .collect(),
+            );
+        }
+    }
+    let final_monke_triangles = monke_triangles_transformed
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+    println!("init took {} s", start.elapsed().as_secs_f32());
+    start = Instant::now();
+    println!("building bvh tree");
+    let monke_object = Arc::new(graphics::path_tracer::primitives::triangles_to_solid(
+        final_monke_triangles,
         Arc::new(grey_diffuse),
+        args.min_leaf_size,
     ));
     let transformed_monke_object =
         Arc::new(graphics::path_tracer::primitives::TransformedObject::new(
@@ -55,7 +89,10 @@ fn main() {
                 trans: math::v(0., 0., 8.),
             },
         ));
+    println!("bvh took {} s", start.elapsed().as_secs_f32());
+    start = Instant::now();
     let mut img2: ImageBuffer<image::Rgb<u8>, Vec<u8>> = ImageBuffer::new(w as u32, w as u32);
+    println!("rendering image");
     let pixel_vec: Vec<V3> = (0usize..(w * w))
         .into_par_iter()
         .map(move |x| (x % w, x / w))
@@ -116,8 +153,8 @@ fn main() {
                     Arc::new(pink_ball_obj),
                     Arc::new(turquoise_ball_obj),
                     transformed_monke_object.clone(),
-                    Arc::new(top_plane_obj),
-                    Arc::new(bottom_plane_obj),
+                    //Arc::new(top_plane_obj),
+                    //Arc::new(bottom_plane_obj),
                 ],
             };
 
@@ -156,7 +193,7 @@ fn main() {
                             },
                             &scene,
                             &math::Ray {
-                                x: math::O,
+                                x: math::v(0., 0., -60.),
                                 d: math::normalize(&subpix_loc),
                             },
                         )

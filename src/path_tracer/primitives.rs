@@ -50,18 +50,19 @@ pub fn obj_to_triangles(objs: &Vec<ObjLine>) -> Vec<Triangle> {
     triangles
 }
 
-pub fn obj_to_solid<B: BSDF + 'static>(
-    objs: &Vec<ObjLine>,
+pub fn triangles_to_solid<B: BSDF + 'static>(
+    objs: Vec<Triangle>,
     bsdf: Arc<B>,
+    min_leaf_size: usize,
 ) -> BVHNode<Solid<B, Triangle>> {
     bvh::BVHNode::new(
-        obj_to_triangles(objs)
-            .into_iter()
+        objs.into_iter()
             .map(|t| Solid {
                 bsdf: bsdf.clone(),
                 intersectable: Arc::new(t),
             })
             .collect(),
+        min_leaf_size,
     )
 }
 
@@ -141,8 +142,20 @@ impl<O: Object> TransformedObject<O> {
 
 impl<O: Object> Object for TransformedObject<O> {
     fn intersect(&self, r: &Ray) -> Option<IntersectionWithBSDF> {
+        let inverted = self.transform.invert();
         self.wrapped
             .intersect(&math::transform_ray(self.transform, r))
+            .map(|(math::Intersection { x, n, s, t }, b)| {
+                (
+                    math::Intersection {
+                        x: inverted.do_affine(x),
+                        n: inverted.do_linear(n),
+                        s: inverted.do_linear(s),
+                        t,
+                    },
+                    b,
+                )
+            })
     }
 }
 

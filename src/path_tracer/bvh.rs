@@ -1,8 +1,10 @@
 use crate::math::{v, Ray, V3};
 use crate::path_tracer;
+use crate::path_tracer::{IntersectionWithBSDF, Object};
+
 #[derive(Debug)]
 pub enum BVHItem<T: Bounded> {
-    Leaf(T),
+    Leaf(Vec<T>),
     Branch {
         left: Box<BVHNode<T>>,
         right: Box<BVHNode<T>>,
@@ -25,14 +27,13 @@ pub trait Bounded {
 }
 
 impl<T: Bounded> BVHNode<T> {
-    pub fn new(items: Vec<T>) -> Self {
-        let mut bvec = items as BoundedVec<T>;
-        let (min, max) = bvec.get_bounds();
-        if bvec.len() == 1 {
+    pub fn new(items: Vec<T>, max_leaf_size: usize) -> Self {
+        let (min, max) = items.get_bounds();
+        if items.len() <= max_leaf_size {
             BVHNode {
                 min,
                 max,
-                item: BVHItem::Leaf(bvec.remove(0)),
+                item: BVHItem::Leaf(items),
             }
         } else {
             let size = max - min;
@@ -45,7 +46,7 @@ impl<T: Bounded> BVHNode<T> {
             let mut left = Vec::new();
             let mut right = Vec::new();
             let mid = 0.5 * (max + min);
-            for item in bvec.into_iter() {
+            for item in items.into_iter() {
                 if vec_indexer(item.get_midpoint()) < vec_indexer(mid) {
                     left.push(item);
                 } else {
@@ -62,16 +63,15 @@ impl<T: Bounded> BVHNode<T> {
                 min,
                 max,
                 item: BVHItem::Branch {
-                    left: Box::new(BVHNode::new(left)),
-                    right: Box::new(BVHNode::new(right)),
+                    left: Box::new(BVHNode::new(left, max_leaf_size)),
+                    right: Box::new(BVHNode::new(right, max_leaf_size)),
                 },
             }
         }
     }
 }
 
-type BoundedVec<T> = Vec<T>;
-impl<T: Bounded> Bounded for BoundedVec<T> {
+impl<T: Bounded> Bounded for Vec<T> {
     fn get_bounds(&self) -> (V3, V3) {
         let mut state: Option<(V3, V3)> = None;
         for item in self.iter() {
@@ -92,38 +92,47 @@ impl<T: Bounded> Bounded for BoundedVec<T> {
 impl<T: Bounded + path_tracer::Object> BVHNode<T> {
     fn inner_intersect(&self, r: &Ray) -> Option<path_tracer::IntersectionWithBSDF> {
         match &self.item {
-            BVHItem::Leaf(t) => t.intersect(r),
-            BVHItem::Branch { left, right } => {
-                match (left.inner_intersect(r), right.inner_intersect(r)) {
-                    (None, None) => None,
-                    (None, Some(i)) => Some(i),
-                    (Some(i), None) => Some(i),
-                    (Some(i), Some(j)) => {
-                        let ti = i.0.t;
-                        let tj = j.0.t;
-                        if ti < tj {
-                            Some(i)
-                        } else {
-                            Some(j)
+            BVHItem::Leaf(objects) => {
+                let mut ret: Option<IntersectionWithBSDF> = None;
+                for object in objects.iter() {
+                    let intersection = object.intersect(r);
+                    match (&ret, &intersection) {
+                        (Some((ret_intersection, _)), Some((new_intersection, _))) => {
+                            if ret_intersection.t > new_intersection.t {
+                                ret = intersection;
+                            }
                         }
+                        (None, Some(_)) => ret = intersection,
+                        _ => {}
                     }
                 }
+                ret
             }
+            BVHItem::Branch { left, right } => match (left.intersect(r), right.intersect(r)) {
+                (None, None) => None,
+                (None, Some(i)) => Some(i),
+                (Some(i), None) => Some(i),
+                (Some(i), Some(j)) => {
+                    let ti = i.0.t;
+                    let tj = j.0.t;
+                    if ti < tj {
+                        Some(i)
+                    } else {
+                        Some(j)
+                    }
+                }
+            },
         }
     }
 }
 
 impl<T: Bounded + path_tracer::Object> path_tracer::Object for BVHNode<T> {
     fn intersect(&self, r: &Ray) -> Option<path_tracer::IntersectionWithBSDF> {
-        //dbg!("in intersect");
         let x_interval = get_interval_from_linear(r.d.x, r.x.x, self.min.x, self.max.x);
         let y_interval = get_interval_from_linear(r.d.y, r.x.y, self.min.y, self.max.y);
         let z_interval = get_interval_from_linear(r.d.z, r.x.z, self.min.z, self.max.z);
         match intersect(intersect(x_interval, y_interval), z_interval) {
-            Interval::Empty => {
-                /*dbg!("empty interval!");*/
-                None
-            }
+            Interval::Empty => None,
             _ => self.inner_intersect(r),
         }
     }
@@ -145,7 +154,7 @@ fn intersect(a: Interval, b: Interval) -> Interval {
                 Interval::Bounds(new_min, new_max)
             }
         }
-        _ => return Interval::Empty,
+        _ => Interval::Empty,
     }
 }
 

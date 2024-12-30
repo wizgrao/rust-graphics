@@ -1,7 +1,7 @@
 use clap::Parser;
-use graphics::math;
 use graphics::math::{B1, B2, B3, V3};
-use graphics::path_tracer::CupLight;
+use graphics::path_tracer::primitives::CupLight;
+use graphics::{math, path_tracer};
 use image::{ImageBuffer, Pixel};
 use rayon::iter::IntoParallelIterator;
 use rayon::prelude::*;
@@ -39,7 +39,22 @@ fn main() {
     let w = args.size;
     println!("Starting image generation!");
     let start = Instant::now();
+    let grey_diffuse = path_tracer::primitives::Lambertian {
+        reflectance: math::v(0.7, 0.7, 0.7),
+    };
     let monke_obj = Arc::new(graphics::path_tracer::obj::read_obj_file("monkey.obj").unwrap());
+    let monke_object = Arc::new(graphics::path_tracer::primitives::obj_to_solid(
+        &monke_obj.clone(),
+        Arc::new(grey_diffuse),
+    ));
+    let transformed_monke_object =
+        Arc::new(graphics::path_tracer::primitives::TransformedObject::new(
+            monke_object,
+            math::Transform {
+                mat: math::M3::new(B1, -B2, -B3),
+                trans: math::v(0., 0., 8.),
+            },
+        ));
     let mut img2: ImageBuffer<image::Rgb<u8>, Vec<u8>> = ImageBuffer::new(w as u32, w as u32);
     let pixel_vec: Vec<V3> = (0usize..(w * w))
         .into_par_iter()
@@ -49,10 +64,10 @@ fn main() {
                 x: math::v(-20.1, 0., -15.),
                 r: 0.5,
             };
-            let pink_light = graphics::path_tracer::Emissive {
+            let pink_light = graphics::path_tracer::primitives::Emissive {
                 emission: math::v(6400., 0., 6400.),
             };
-            let pink_ball_obj = graphics::path_tracer::Solid {
+            let pink_ball_obj = graphics::path_tracer::primitives::Solid {
                 bsdf: Arc::new(pink_light),
                 intersectable: Arc::new(left_sphere_light),
             };
@@ -60,79 +75,49 @@ fn main() {
                 x: math::v(20.1, 0., -15.),
                 r: 0.5,
             };
-            let turquoise_light = graphics::path_tracer::Emissive {
+            let turquoise_light = graphics::path_tracer::primitives::Emissive {
                 emission: math::v(0., 6400., 6400.),
             };
-            let turquoise_ball_obj = graphics::path_tracer::Solid {
+            let turquoise_ball_obj = graphics::path_tracer::primitives::Solid {
                 bsdf: Arc::new(turquoise_light),
                 intersectable: Arc::new(right_sphere_light),
             };
-            let middle_sphere = math::Sphere {
-                x: math::v(0., 0., 16.),
-                r: 1.,
-            };
 
-            let middle_triangle = math::Triangle {
-                v1: math::v(1., -1., 16.),
-                v0: math::v(-1.0, -1., 16.),
-                v2: math::v(0., 1., 16.),
-            };
-            let grey_diffuse = graphics::path_tracer::Lambertian {
-                reflectance: math::v(0.5, 0.5, 0.5),
-            };
-            let middle_ball_obj = graphics::path_tracer::Solid {
-                bsdf: Arc::new(grey_diffuse),
-                intersectable: Arc::new(middle_sphere),
-            };
-            let middle_triangle_obj = graphics::path_tracer::Solid {
-                bsdf: Arc::new(grey_diffuse),
-                intersectable: Arc::new(middle_triangle),
-            };
             let top_plane = math::Plane {
-                x: math::v(0., 5.1, 0.),
+                x: math::v(0., 1.1, 0.),
                 n: math::v(0., -1., 0.),
                 s: math::v(1., 0., 0.),
             };
-            let top_plane_obj = graphics::path_tracer::Solid {
+            let top_plane_obj = graphics::path_tracer::primitives::Solid {
                 bsdf: Arc::new(grey_diffuse),
                 intersectable: Arc::new(top_plane),
             };
             let bottom_plane = math::Plane {
-                x: math::v(0., -6.1, 0.),
+                x: math::v(0., -1.1, 0.),
                 n: math::v(0., 1., 0.),
                 s: math::v(1., 0., 0.),
             };
-            let bottom_plane_obj = graphics::path_tracer::Solid {
+            let bottom_plane_obj = graphics::path_tracer::primitives::Solid {
                 bsdf: Arc::new(grey_diffuse),
                 intersectable: Arc::new(bottom_plane),
             };
-            let monke_object =
-                graphics::path_tracer::obj_to_solid(&monke_obj.clone(), Arc::new(grey_diffuse));
-            let transformed_monke_object = graphics::path_tracer::TransformedObject::new(
-                monke_object,
-                math::Transform {
-                    mat: math::M3::new(B1, -B2, -B3),
-                    trans: math::v(0., 0., 8.),
-                },
-            );
-            let l1 = graphics::path_tracer::SphereLight {
+
+            let l1 = graphics::path_tracer::primitives::SphereLight {
                 sphere: left_sphere_light,
                 e: pink_light,
             };
-            let l2 = graphics::path_tracer::SphereLight {
+            let l2 = graphics::path_tracer::primitives::SphereLight {
                 sphere: right_sphere_light,
                 e: turquoise_light,
             };
 
-            let combined_objects = graphics::path_tracer::Cup {
+            let combined_objects = graphics::path_tracer::primitives::Cup {
                 objects: vec![
-                    Box::new(pink_ball_obj),
-                    Box::new(turquoise_ball_obj),
-                    Box::new(transformed_monke_object),
-                    //Box::new(middle_triangle_obj),
-                    //Box::new(middle_ball_obj),
-                    //Box::new(top_plane_obj),
-                    //Box::new(bottom_plane_obj),
+                    Arc::new(pink_ball_obj),
+                    Arc::new(turquoise_ball_obj),
+                    transformed_monke_object.clone(),
+                    Arc::new(top_plane_obj),
+                    Arc::new(bottom_plane_obj),
                 ],
             };
 

@@ -74,6 +74,7 @@ pub struct Triangle {
 impl Intersectable for Triangle {
     // https://cs184.eecs.berkeley.edu/sp24/lecture/9-20/ray-tracing-and-acceleration-str
     fn intersect(&self, r: &Ray) -> Option<Intersection> {
+        //dbg!("in intersection method!");
         let e1 = self.v1 - self.v0;
         let e2 = self.v2 - self.v0;
         let s = r.x - self.v0;

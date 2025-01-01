@@ -42,6 +42,9 @@ struct Args {
 
     #[arg(short, long, default_value_t = 10)]
     replicas: i32,
+
+    #[arg(short, long, default_value = "monkey.obj")]
+    file: String,
 }
 fn main() {
     let args = Args::parse();
@@ -51,7 +54,7 @@ fn main() {
     let grey_diffuse = path_tracer::primitives::Lambertian {
         reflectance: math::v(0.7, 0.7, 0.7),
     };
-    let monke_obj = graphics::path_tracer::obj::read_obj_file("monkey.obj").unwrap();
+    let monke_obj = graphics::path_tracer::obj::read_obj_file(&args.file).unwrap();
     let monke_triangles = path_tracer::primitives::obj_to_triangles(&monke_obj);
     let mut monke_triangles_transformed: Vec<Vec<Triangle>> = Vec::new();
     for i in -args.replicas..=args.replicas {
@@ -86,7 +89,7 @@ fn main() {
             monke_object,
             math::Transform {
                 mat: math::M3::new(B1, -B2, -B3),
-                trans: math::v(0., 0., 8.),
+                trans: math::v(0., 0.1, 8.),
             },
         ));
     println!("bvh took {} s", start.elapsed().as_secs_f32());
@@ -193,7 +196,7 @@ fn main() {
                             },
                             &scene,
                             &math::Ray {
-                                x: math::v(0., 0., -60.),
+                                x: math::v(0., 0., 7.5),
                                 d: math::normalize(&subpix_loc),
                             },
                         )

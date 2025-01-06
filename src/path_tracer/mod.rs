@@ -1,4 +1,4 @@
-use crate::math::{Intersection, Ray};
+use crate::math::{Intersection, Ray, M3};
 use crate::{math, V3};
 use rand::distributions::Standard;
 use rand::{thread_rng, Rng};
@@ -39,6 +39,17 @@ fn sample_hemisphere() -> (f64, V3) {
     )
 }
 
+fn sample_disk() -> V3 {
+    loop {
+        let x: f64 = thread_rng().sample(Standard);
+        let y: f64 = thread_rng().sample(Standard);
+        let v = math::v(x, y, 0.);
+        if math::abs2(&v) <= 1. {
+            return v;
+        }
+    }
+}
+
 fn sample_sphere() -> V3 {
     let x = thread_rng().sample(StandardNormal);
     let y = thread_rng().sample(StandardNormal);
@@ -54,6 +65,81 @@ pub trait Object {
 pub struct Photon {
     pub d: Ray,
     pub radiance: V3,
+}
+
+#[derive(Clone, Debug)]
+pub struct Camera {
+    pub lens_origin: V3,
+    pub sensor_origin: V3,
+    pub sensor_x: V3,
+    pub sensor_y: V3,
+    pub lens_direction: V3,
+    pub lens_radius: f64,
+    pub focal_length: f64,
+}
+
+impl Camera {
+    pub fn new(
+        lens_origin: V3,
+        lens_direction: V3,
+        lens_radius: f64,
+        focal_length: f64,
+        focus_distance: f64,
+        sensor_x: V3,
+        sensor_y: V3,
+    ) -> Self {
+        Self {
+            lens_origin,
+            sensor_origin: lens_origin
+                - (1.0 / (1. / focal_length - 1. / focus_distance)) * lens_direction,
+            sensor_x,
+            sensor_y,
+            lens_direction,
+            lens_radius,
+            focal_length,
+        }
+    }
+    fn get_lens_basis(&self) -> M3 {
+        let basis = if math::dot(&math::B1, &self.lens_direction).abs() < 0.9 {
+            math::B1
+        } else {
+            math::B2
+        };
+        let camera_b1 = math::normalize(
+            &(basis - math::dot(&basis, &self.lens_direction) * self.lens_direction),
+        );
+        let camera_b2 = math::cross(&camera_b1, &self.lens_direction);
+        M3::new(camera_b1, camera_b2, self.lens_direction)
+    }
+    fn sample_lens_point(&self) -> V3 {
+        let disk_point = sample_disk();
+        self.lens_radius * (self.get_lens_basis() * disk_point) + self.lens_origin
+    }
+
+    fn get_lens_ray(&self, sensor_point: V3, lens_point: V3) -> Ray {
+        let l2w = self.get_lens_basis();
+        let w2l = l2w.t();
+        let normalized_sensor_point = sensor_point - self.lens_origin;
+        let normalized_lens_point = lens_point - self.lens_origin;
+        let sensor_point_lens_space = w2l * normalized_sensor_point;
+        let lens_point_lens_space = w2l * normalized_lens_point;
+        let sensor_lens_dir = lens_point_lens_space - sensor_point_lens_space;
+        let focal_lens_dir = self.focal_length / sensor_lens_dir.z * sensor_lens_dir;
+        let focal_plane_point = sensor_point_lens_space - focal_lens_dir;
+        let ray_dir = l2w * math::normalize(&(-focal_plane_point));
+        Ray {
+            x: lens_point,
+            d: ray_dir,
+        }
+    }
+
+    fn get_sensor_point(&self, x: f64, y: f64) -> V3 {
+        self.sensor_origin + x * self.sensor_x + y * self.sensor_y
+    }
+
+    pub fn sample_ray(&self, x: f64, y: f64) -> Ray {
+        self.get_lens_ray(self.get_sensor_point(x, y), self.sample_lens_point())
+    }
 }
 
 pub trait Light {

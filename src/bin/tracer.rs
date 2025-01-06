@@ -45,10 +45,14 @@ struct Args {
 
     #[arg(short, long, default_value = "monkey.obj")]
     file: String,
+
+    #[arg(long, default_value_t = 0.0001)]
+    lens_radius: f64,
 }
 fn main() {
     let args = Args::parse();
     let w = args.size;
+    let h = args.size * 2 / 3;
     println!("initializing scene");
     let mut start = Instant::now();
     let grey_diffuse = path_tracer::primitives::Lambertian {
@@ -89,14 +93,29 @@ fn main() {
             monke_object,
             math::Transform {
                 mat: math::M3::new(B1, -B2, -B3),
-                trans: math::v(0., 0.1, 8.),
+                trans: math::v(0., 0.15, 0.5),
             },
         ));
     println!("bvh took {} s", start.elapsed().as_secs_f32());
     start = Instant::now();
-    let mut img2: ImageBuffer<image::Rgb<u8>, Vec<u8>> = ImageBuffer::new(w as u32, w as u32);
+    let mut img2: ImageBuffer<image::Rgb<u8>, Vec<u8>> = ImageBuffer::new(w as u32, h as u32);
     println!("rendering image");
-    let pixel_vec: Vec<V3> = (0usize..(w * w))
+    let lens_width = 0.035;
+    let lens_height = 0.035 * 2. / 3.;
+    let focal_length = 0.035;
+    let f_num = 64.0;
+    let camera = path_tracer::Camera::new(
+        math::O,
+        B3,
+        focal_length / f_num * 0.5,
+        focal_length,
+        0.5,
+        0.5 * lens_width * B1,
+        0.5 * lens_height * B2,
+    );
+
+    dbg!(&camera);
+    let pixel_vec: Vec<V3> = (0usize..(w * h))
         .into_par_iter()
         .map(move |x| (x % w, x / w))
         .map(move |(x, y)| {
@@ -171,7 +190,7 @@ fn main() {
             let pix_width = 2. / w as f64;
             let loc = math::V3 {
                 x: (2. * x as f64) / w as f64 - 1.,
-                y: (2. * y as f64) / w as f64 - 1.,
+                y: (-2. * y as f64) / h as f64 + 1.,
                 z: 4.,
             };
             let anti_aliasing = args.antialias;
@@ -195,10 +214,7 @@ fn main() {
                                 preview: args.preview,
                             },
                             &scene,
-                            &math::Ray {
-                                x: math::v(0., 0., 7.5),
-                                d: math::normalize(&subpix_loc),
-                            },
+                            &camera.sample_ray(subpix_loc.x, subpix_loc.y),
                         )
                 }
             }
